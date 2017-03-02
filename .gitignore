@@ -1,0 +1,8 @@
+.DS_Store
+tmp
+bin
+android/build
+android/libs
+.classpath
+.apt_generated
+.idea

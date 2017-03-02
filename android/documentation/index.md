@@ -40,6 +40,7 @@ setInterval(function() {
   var fore = applifecycle.isInForeground();
   Ti.API.debug("***********  inForeground: " + fore);
   if (fore != isInForeground) {
+    isInForeground = fore;
     var evt = (fore) ? 'resumed' : 'pause';
     Ti.App.fireEvent(evt);
   }
