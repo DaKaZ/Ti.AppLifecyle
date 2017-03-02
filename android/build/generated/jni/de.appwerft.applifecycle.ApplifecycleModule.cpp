@@ -1,6 +1,6 @@
 /**
  * Appcelerator Titanium Mobile
- * Copyright (c) 2011-2013 by Appcelerator, Inc. All Rights Reserved.
+ * Copyright (c) 2011-2016 by Appcelerator, Inc. All Rights Reserved.
  * Licensed under the terms of the Apache Public License
  * Please see the LICENSE included with this distribution for details.
  */
@@ -27,72 +27,68 @@
 
 using namespace v8;
 
-		namespace de {
-		namespace appwerft {
-		namespace applifecycle {
+namespace de {
+namespace appwerft {
+namespace applifecycle {
 
 
-Persistent<FunctionTemplate> ApplifecycleModule::proxyTemplate = Persistent<FunctionTemplate>();
+Persistent<FunctionTemplate> ApplifecycleModule::proxyTemplate;
 jclass ApplifecycleModule::javaClass = NULL;
 
 ApplifecycleModule::ApplifecycleModule(jobject javaObject) : titanium::Proxy(javaObject)
 {
 }
 
-void ApplifecycleModule::bindProxy(Handle<Object> exports)
+void ApplifecycleModule::bindProxy(Local<Object> exports, Local<Context> context)
 {
-	if (proxyTemplate.IsEmpty()) {
-		getProxyTemplate();
-	}
+	Isolate* isolate = context->GetIsolate();
 
-	// use symbol over string for efficiency
-	Handle<String> nameSymbol = String::NewSymbol("Applifecycle");
-
-	Local<Function> proxyConstructor = proxyTemplate->GetFunction();
-	Local<Object> moduleInstance = proxyConstructor->NewInstance();
+	Local<FunctionTemplate> pt = getProxyTemplate(isolate);
+	Local<Function> proxyConstructor = pt->GetFunction(context).ToLocalChecked();
+	Local<String> nameSymbol = NEW_SYMBOL(isolate, "Applifecycle"); // use symbol over string for efficiency
+	Local<Object> moduleInstance = proxyConstructor->NewInstance(context).ToLocalChecked();
 	exports->Set(nameSymbol, moduleInstance);
 }
 
-void ApplifecycleModule::dispose()
+void ApplifecycleModule::dispose(Isolate* isolate)
 {
 	LOGD(TAG, "dispose()");
 	if (!proxyTemplate.IsEmpty()) {
-		proxyTemplate.Dispose();
-		proxyTemplate = Persistent<FunctionTemplate>();
+		proxyTemplate.Reset();
 	}
 
-	titanium::KrollModule::dispose();
+	titanium::KrollModule::dispose(isolate);
 }
 
-Handle<FunctionTemplate> ApplifecycleModule::getProxyTemplate()
+Local<FunctionTemplate> ApplifecycleModule::getProxyTemplate(Isolate* isolate)
 {
 	if (!proxyTemplate.IsEmpty()) {
-		return proxyTemplate;
+		return proxyTemplate.Get(isolate);
 	}
 
 	LOGD(TAG, "GetProxyTemplate");
 
 	javaClass = titanium::JNIUtil::findClass("de/appwerft/applifecycle/ApplifecycleModule");
-	HandleScope scope;
+	EscapableHandleScope scope(isolate);
 
 	// use symbol over string for efficiency
-	Handle<String> nameSymbol = String::NewSymbol("Applifecycle");
+	Local<String> nameSymbol = NEW_SYMBOL(isolate, "Applifecycle");
 
-	Handle<FunctionTemplate> t = titanium::Proxy::inheritProxyTemplate(
-		titanium::KrollModule::getProxyTemplate()
+	Local<FunctionTemplate> t = titanium::Proxy::inheritProxyTemplate(isolate,
+		titanium::KrollModule::getProxyTemplate(isolate)
 , javaClass, nameSymbol);
 
-	proxyTemplate = Persistent<FunctionTemplate>::New(t);
-	proxyTemplate->Set(titanium::Proxy::inheritSymbol,
-		FunctionTemplate::New(titanium::Proxy::inherit<ApplifecycleModule>)->GetFunction());
+	proxyTemplate.Reset(isolate, t);
+	t->Set(titanium::Proxy::inheritSymbol.Get(isolate),
+		FunctionTemplate::New(isolate, titanium::Proxy::inherit<ApplifecycleModule>)->GetFunction());
 
-	titanium::ProxyFactory::registerProxyPair(javaClass, *proxyTemplate);
+	titanium::ProxyFactory::registerProxyPair(javaClass, *t);
 
 	// Method bindings --------------------------------------------------------
-	DEFINE_PROTOTYPE_METHOD(proxyTemplate, "isInForeground", ApplifecycleModule::isInForeground);
+	titanium::SetProtoMethod(isolate, t, "isInForeground", ApplifecycleModule::isInForeground);
 
-	Local<ObjectTemplate> prototypeTemplate = proxyTemplate->PrototypeTemplate();
-	Local<ObjectTemplate> instanceTemplate = proxyTemplate->InstanceTemplate();
+	Local<ObjectTemplate> prototypeTemplate = t->PrototypeTemplate();
+	Local<ObjectTemplate> instanceTemplate = t->InstanceTemplate();
 
 	// Delegate indexed property get and set to the Java proxy.
 	instanceTemplate->SetIndexedPropertyHandler(titanium::Proxy::getIndexedProperty,
@@ -104,18 +100,20 @@ Handle<FunctionTemplate> ApplifecycleModule::getProxyTemplate()
 
 	// Accessors --------------------------------------------------------------
 
-	return proxyTemplate;
+	return scope.Escape(t);
 }
 
 // Methods --------------------------------------------------------------------
-Handle<Value> ApplifecycleModule::isInForeground(const Arguments& args)
+void ApplifecycleModule::isInForeground(const FunctionCallbackInfo<Value>& args)
 {
 	LOGD(TAG, "isInForeground()");
-	HandleScope scope;
+	Isolate* isolate = args.GetIsolate();
+	HandleScope scope(isolate);
 
 	JNIEnv *env = titanium::JNIScope::getEnv();
 	if (!env) {
-		return titanium::JSException::GetJNIEnvironmentError();
+		titanium::JSException::GetJNIEnvironmentError(isolate);
+		return;
 	}
 	static jmethodID methodID = NULL;
 	if (!methodID) {
@@ -123,11 +121,18 @@ Handle<Value> ApplifecycleModule::isInForeground(const Arguments& args)
 		if (!methodID) {
 			const char *error = "Couldn't find proxy method 'isInForeground' with signature '()Z'";
 			LOGE(TAG, error);
-				return titanium::JSException::Error(error);
+				titanium::JSException::Error(isolate, error);
+				return;
 		}
 	}
 
-	titanium::Proxy* proxy = titanium::Proxy::unwrap(args.Holder());
+	Local<Object> holder = args.Holder();
+	// If holder isn't the JavaObject wrapper we expect, look up the prototype chain
+	if (!JavaObject::isJavaObject(holder)) {
+		holder = holder->FindInstanceInPrototypeChain(getProxyTemplate(isolate));
+	}
+
+	titanium::Proxy* proxy = titanium::Proxy::unwrap(holder);
 
 	jvalue* jArguments = 0;
 
@@ -143,23 +148,23 @@ Handle<Value> ApplifecycleModule::isInForeground(const Arguments& args)
 
 
 	if (env->ExceptionCheck()) {
-		Handle<Value> jsException = titanium::JSException::fromJavaException();
+		Local<Value> jsException = titanium::JSException::fromJavaException(isolate);
 		env->ExceptionClear();
-		return jsException;
+		return;
 	}
 
 
-	Handle<Boolean> v8Result = titanium::TypeConverter::javaBooleanToJsBoolean(env, jResult);
+	Local<Boolean> v8Result = titanium::TypeConverter::javaBooleanToJsBoolean(isolate, env, jResult);
 
 
 
-	return v8Result;
+	args.GetReturnValue().Set(v8Result);
 
 }
 
 // Dynamic property accessors -------------------------------------------------
 
 
-		} // applifecycle
-		} // appwerft
-		} // de
+} // applifecycle
+} // appwerft
+} // de

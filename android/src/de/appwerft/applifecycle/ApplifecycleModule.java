@@ -18,6 +18,7 @@ import java.util.concurrent.ExecutionException;
 import org.appcelerator.kroll.KrollDict;
 import org.appcelerator.kroll.KrollModule;
 import org.appcelerator.kroll.annotations.Kroll;
+import org.appcelerator.kroll.common.Log;
 
 import org.appcelerator.titanium.TiApplication;
 
@@ -45,6 +46,7 @@ public class ApplifecycleModule extends KrollModule {
 			"LIFECYCLE_TESTINTERVAL", 100);
 	private static int testIntervalBackground = appProperties.getInt(
 			"LIFECYCLE_TESTINTERVAL_BACKGROUND", 500);
+	private static final String LCAT = "Applifecycle";
 
 	public ApplifecycleModule() {
 		super();
@@ -67,7 +69,7 @@ public class ApplifecycleModule extends KrollModule {
 	}
 
 	@Kroll.onAppCreate
-	public void onAppCreate(final TiApplication app) {
+	public static void onAppCreate(final TiApplication app) {
 		mApp = app;
 
 		Context ctx = TiApplication.getInstance().getApplicationContext();
@@ -77,7 +79,7 @@ public class ApplifecycleModule extends KrollModule {
 		intentFilter.addAction(Intent.ACTION_SCREEN_OFF);
 		mReceiver = new ScreenReceiver();
 		ctx.registerReceiver(mReceiver, intentFilter);
-
+		/*
 		cronJob.scheduleAtFixedRate(new TimerTask() {
 			@Override
 			public void run() {
@@ -85,16 +87,19 @@ public class ApplifecycleModule extends KrollModule {
 				if (counter % 5 == 0 || wasInFront) {
 					TaskTestResult result = _isInForeground();
 					boolean isInFront = result.getIsForeground();
+					Log.d(LCAT, "scheduleAtFixedRate isInFront: " + isInFront);
 					if (isInFront != wasInFront) {
 						String key = (isInFront == true) ? "resumed" : "paused";
 						KrollDict dict = new KrollDict();
 						dict.put("packageName", result.getPackageName());
+						Log.d(LCAT, "Firing event: " + key);
 						mApp.fireAppEvent(key, dict);
 						wasInFront = isInFront;
 					}
 				}
 			}
 		}, 0, testIntervalForeground);
+		*/
 	}
 
 	@Kroll.method
@@ -103,6 +108,7 @@ public class ApplifecycleModule extends KrollModule {
 	}
 
 	static public TaskTestResult _isInForeground() {
+		Log.d(LCAT, "isInForeground: " + AppStateListener.oneActivityIsResumed);
 		try {
 			TaskTestResult result = new ForegroundCheckTask().execute(
 					TiApplication.getInstance().getApplicationContext()).get();

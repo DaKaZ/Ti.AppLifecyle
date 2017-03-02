@@ -26,14 +26,25 @@ This test interval is only for `paused` and `resumed`. Screen events are event t
 
 ##Usage
 
-You have only to include in tiapp.xml:
+Include in tiapp.xml:
 ```xml
 <module platform="android">de.appwerft.applifecycle</module>
 ```
 
-No `require` !
+Just call in your app.js or index.js:
 
-Just call in your app.js:
+```javascript
+var applifecycle = require("de.appwerft.applifecycle");
+var isInForeground = applifecycle.isInForeground();
+setInterval(function() {
+  var fore = applifecycle.isInForeground();
+  Ti.API.debug("***********  inForeground: " + fore);
+  if (fore != isInForeground) {
+    var evt = (fore) ? 'resumed' : 'pause';
+    Ti.App.fireEvent(evt);
+  }
+}, 1000);
+```
 
 ```javascript
 ["screenon screenoff paused resumed"].split(' ').forEach(function(event){
